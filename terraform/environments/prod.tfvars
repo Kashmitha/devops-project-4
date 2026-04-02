@@ -1,0 +1,10 @@
+resource_group_name = "devops-project4-prod-rg"
+location            = "eastus"
+environment         = "prod"
+aks_cluster_name    = "devops-project4-prod-aks"
+kubernetes_version  = "1.33.7"
+node_vm_size        = "Standard_DC4as_v5"
+node_count          = 3
+min_node_count      = 2
+max_node_count      = 5
+acr_name            = "project4prodacrkashm"
