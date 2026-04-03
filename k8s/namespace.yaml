@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops-app
+  labels:
+    project: devops-project-4
+    environment: dev
+    managed-by: kubectl
