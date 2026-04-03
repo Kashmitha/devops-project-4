@@ -7,34 +7,29 @@ metadata:
     app: devops-flask-app
     version: "1.0.0"
     project: devops-project-4
-  annotaions:
-    deployment.kubernetes.io/revison: "1"
-    description: "Flask app deployed on AKS 1.33.7 - DevOps Project 4"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    description: "Flask app deployed on AKS 1.33.7 — DevOps Project 4"
 spec:
   replicas: 3
   selector:
     matchLabels:
       app: devops-flask-app
-  
-  # Rolling update strategy
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
-
   template:
     metadata:
       labels:
         app: devops-flask-app
         version: "1.0.0"
     spec:
-      # Security context for the pod
       securityContext:
-        runAsNonRoot: root
+        runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-
       containers:
         - name: flask-app
           image: project4acrkashm.azurecr.io/devops-flask-app:1.0.0
@@ -42,13 +37,14 @@ spec:
           ports:
             - containerPort: 8080
               name: http
-
-          # Load env vars from Configmap
-          envForm:
+          envFrom:
             - configMapRef:
                 name: app-config
-            
-          # Resource request and limits
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
           resources:
             requests:
               cpu: "100m"
@@ -57,49 +53,59 @@ spec:
               cpu: "500m"
               memory: "256Mi"
 
-          # Is the app alive
+          # Volume mounts REQUIRED for readOnlyRootFilesystem
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+            - name: app-cache
+              mountPath: /app/__pycache__
+
           livenessProbe:
             httpGet:
               path: /health/live
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
-
-          # Is the app ready to serve traffic
           readinessProbe:
             httpGet:
               path: /health/ready
               port: 8080
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
-
-          # Give the app some time to start up
           startupProbe:
             httpGet:
               path: /health/live
               port: 8080
-            failureThreshold: 10
+            failureThreshold: 15
             periodSeconds: 5
-
-          # Security hardening
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               drop:
                 - ALL
 
-          # Spread pods across nodes
-          topologySpreadConstraints:
-            - maxSkew: 1
-              topologyKey: kubernetes.io/hostname
-              whenUnsatisfiable: DoNotSchedule
-              labelSelector:
-                matchLabels:
-                  app: devops-flask-app
+      # Volumes emptyDir gives writable in-memory space
+      volumes:
+        - name: tmp-dir
+          emptyDir:
+            medium: Memory    # In-memory tmpfs — fast and secure
+            sizeLimit: 64Mi
+        - name: app-cache
+          emptyDir:
+            sizeLimit: 32Mi
 
-          terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: devops-flask-app
+      terminationGracePeriodSeconds: 30

@@ -8,13 +8,13 @@ metadata:
     project: devops-project-4
   annotations:
     service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: "/health/live"
-  spec:
-    type: LoadBalancer
-    selector:
-      app: devops-flask-app
-    ports:
-      - name: http
-        protocol: TCP
-        port: 80
-        targetPort: 8080
-    sessionAffinity: None
+spec:
+  type: LoadBalancer
+  selector:
+    app: devops-flask-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+  sessionAffinity: None
