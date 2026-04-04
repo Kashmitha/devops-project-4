@@ -18,7 +18,7 @@ def home():
 @app.route('/health/live')
 def liveness():
     """Kubernetes liveness probe endpoint"""
-    return jsonify({"status": "broken"}), 500
+    return jsonify({"status": "healthy"}), 200
 
 @app.route('/health/ready')
 def readiness():
