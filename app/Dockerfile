@@ -23,7 +23,7 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-ENV APP_VERSION=1.0.0
+ENV APP_VERSION=1.1.0
 ENV ENVIRONMENT=dev
 # Explicitly set PATH so gunicorn is found by non-root user
 ENV PATH="/usr/local/bin:$PATH"
