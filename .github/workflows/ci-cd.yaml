@@ -37,10 +37,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate Kubernetes manifests
-        uses: azure/k8s-lint@v1
+      - name: Validate Kubernetes manifests (kubeconform)
+        uses: docker://ghcr.io/yannh/kubeconform:v0.6.7
         with:
-          manifests: |
+          args: >
+            -summary
+            -strict
+            -ignore-missing-schemas
+            -kubernetes-version 1.29.0
             k8s/namespace.yaml
             k8s/configmap.yaml
             k8s/deployment.yaml
