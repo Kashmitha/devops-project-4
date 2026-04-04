@@ -58,7 +58,7 @@ jobs:
           dockerfile: app/Dockerfile
           ignore: DL3008,DL3009
 
-  # Build & Push 
+  # Build & Push
   build-push:
     name: Build & Push to ACR
     runs-on: ubuntu-latest
@@ -131,12 +131,12 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
+      # Fix: required for AAD-enabled clusters
       - name: Install kubelogin
         uses: azure/use-kubelogin@v2
         with:
           kubelogin-version: 'latest'
 
-      # (keep your existing step)
       - name: Get AKS credentials
         run: |
           az aks get-credentials \
@@ -144,6 +144,7 @@ jobs:
             --name ${{ env.AKS_CLUSTER }} \
             --overwrite-existing
 
+      # Fix: make kubeconfig use the Azure CLI token (non-interactive in CI)
       - name: Convert kubeconfig for non-interactive login
         run: |
           kubelogin convert-kubeconfig -l azurecli
@@ -165,9 +166,8 @@ jobs:
         run: |
           kubectl get pods -n ${{ env.NAMESPACE }}
           kubectl get svc -n ${{ env.NAMESPACE }}
-          EXTERNAL_IP=$(kubectl get svc devops-flask-svc -n ${{ env.NAMESPACE }} \
-            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          EXTERNAL_IP=$(kubectl get svc devops-flask-svc -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           echo "App running at: http://${EXTERNAL_IP}"
           sleep 15
-          curl -f "http://${EXTERNAL_IP}/health/live" || exit 1
+          curl -f "http://${EXTERNAL_IP}/health/live"
           echo "Health check passed!"
