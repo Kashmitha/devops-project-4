@@ -133,7 +133,7 @@ jobs:
 
       # Fix: required for AAD-enabled clusters
       - name: Install kubelogin
-        uses: azure/use-kubelogin@v2
+        uses: azure/use-kubelogin@v1
         with:
           kubelogin-version: 'latest'
 
