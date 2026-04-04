@@ -131,12 +131,22 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
+      - name: Install kubelogin
+        uses: azure/use-kubelogin@v2
+        with:
+          kubelogin-version: 'latest'
+
+      # (keep your existing step)
       - name: Get AKS credentials
         run: |
           az aks get-credentials \
             --resource-group ${{ env.AKS_RG }} \
             --name ${{ env.AKS_CLUSTER }} \
             --overwrite-existing
+
+      - name: Convert kubeconfig for non-interactive login
+        run: |
+          kubelogin convert-kubeconfig -l azurecli
 
       - name: Deploy to AKS with rolling update
         run: |
