@@ -131,11 +131,12 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
-      # Fix: required for AAD-enabled clusters
+      # Required for AAD-enabled clusters
       - name: Install kubelogin
         uses: azure/use-kubelogin@v1
         with:
-          kubelogin-version: 'latest'
+          # IMPORTANT: pin a version to avoid the action trying to resolve "latest" via GitHub API
+          kubelogin-version: "0.1.6"
 
       - name: Get AKS credentials
         run: |
@@ -144,7 +145,7 @@ jobs:
             --name ${{ env.AKS_CLUSTER }} \
             --overwrite-existing
 
-      # Fix: make kubeconfig use the Azure CLI token (non-interactive in CI)
+      # Make kubeconfig use the Azure CLI token (non-interactive in CI)
       - name: Convert kubeconfig for non-interactive login
         run: |
           kubelogin convert-kubeconfig -l azurecli
