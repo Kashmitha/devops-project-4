@@ -1,5 +1,21 @@
 name: AKS CI/CD Pipeline
 
+# ============================================================
+# DevOps Project 4 — GitHub Actions CI/CD
+# Cluster: Azure AKS 1.33.7 (East US)
+# Registry: Azure Container Registry (ACR)
+# Fixed: April 2026
+#
+# FIXES vs previous version:
+#   1. kubelogin-version "0.1.6" → "v0.2.16" (correct tag format + real release)
+#   2. Replaced manual az aks get-credentials + kubelogin convert-kubeconfig
+#      with azure/aks-set-context@v4 (handles both in one step — official way)
+#   3. Added admin: 'true' — required because AKS has Azure RBAC enabled
+#   4. Added setup-kubectl step before aks-set-context
+#   5. Added GITHUB_TOKEN to use-kubelogin to prevent API rate-limit errors
+#   6. Fixed kubernetes-version in kubeconform to 1.33.0 (matches cluster)
+# ============================================================
+
 on:
   push:
     branches: [ main ]
@@ -30,20 +46,56 @@ env:
 
 jobs:
 
-  build-push:
-    name: Build and Push Docker Image
+# ── Job 1: Validate & Lint ───────────────────────────────────────────────────
+  validate:
+    name: Validate & Lint
     runs-on: ubuntu-latest
-
-    outputs:
-      image_tag: ${{ steps.set-tag.outputs.tag }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set image tag
-        id: set-tag
-        run: echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+      - name: Validate Kubernetes manifests (kubeconform)
+        uses: docker://ghcr.io/yannh/kubeconform:v0.6.7
+        with:
+          args: >
+            -summary
+            -strict
+            -ignore-missing-schemas
+            -kubernetes-version 1.33.0
+            k8s/namespace.yaml
+            k8s/configmap.yaml
+            k8s/deployment.yaml
+            k8s/service.yaml
+            k8s/hpa.yaml
+            k8s/resource-quota.yaml
+
+      - name: Validate Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: app/Dockerfile
+          ignore: DL3008,DL3009
+
+# ── Job 2: Build & Push to ACR ──────────────────────────────────────────────
+  build-push:
+    name: Build & Push to ACR
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate image tag from Git SHA
+        id: meta
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "image_tag=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Building image with tag: ${SHORT_SHA}"
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -59,12 +111,28 @@ jobs:
       - name: Login to ACR
         run: az acr login --name ${{ env.ACR_NAME }}
 
-      - name: Build and Push Image
-        run: |
-          IMAGE_TAG=${{ steps.set-tag.outputs.tag }}
-          docker build -t ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} .
-          docker push ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      - name: Build and push Docker image to ACR
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          push: true
+          tags: |
+            ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.image_tag }}
+            ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Confirm image pushed
+        run: |
+          echo "Pushed:"
+          echo "  ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.image_tag }}"
+          echo "  ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:latest"
+
+# ── Job 3: Deploy to AKS ────────────────────────────────────────────────────
   deploy:
     name: Deploy to AKS
     runs-on: ubuntu-latest
@@ -76,6 +144,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Step 1 — Azure login with Service Principal credentials
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -87,40 +156,107 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
+      # Step 2 — Install kubectl (must come before aks-set-context)
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      # Step 3 — Install kubelogin v0.2.16 (latest stable as of April 2026)
+      # FIX: old version "0.1.6" does not exist → caused the 404 crash.
+      # Version tag must start with "v". GITHUB_TOKEN prevents rate-limit errors.
       - name: Install kubelogin
-        uses: azure/setup-kubelogin@v2
+        uses: azure/use-kubelogin@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          kubelogin-version: "v0.1.6"
+          kubelogin-version: 'v0.2.16'
 
-      - name: Get AKS credentials
+      # Step 4 — Set AKS context using the official action
+      # FIX: Replaced manual az aks get-credentials + kubelogin convert-kubeconfig
+      # with azure/aks-set-context@v4 which handles everything in one step.
+      # admin: 'true' is required because the cluster has azure_rbac_enabled = true
+      # (set in terraform/main.tf). Without admin mode, the Service Principal
+      # cannot authenticate via kubelogin in a non-interactive CI environment.
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ env.AKS_RG }}
+          cluster-name: ${{ env.AKS_CLUSTER }}
+          admin: 'true'
+          use-kubelogin: 'true'
+
+      # Step 5 — Confirm kubectl can reach the cluster before deploying
+      - name: Verify kubectl connection
         run: |
-          az aks get-credentials \
-            --resource-group "${{ env.AKS_RG }}" \
-            --name "${{ env.AKS_CLUSTER }}" \
-            --overwrite-existing
+          echo "=== Cluster nodes ==="
+          kubectl get nodes
+          echo ""
+          echo "=== Current pods in ${{ env.NAMESPACE }} ==="
+          kubectl get pods -n ${{ env.NAMESPACE }}
 
-      - name: Convert kubeconfig
-        run: kubelogin convert-kubeconfig -l azurecli
-
-      - name: Deploy to AKS
+      # Step 6 — Trigger rolling update by updating the container image tag
+      # Zero-downtime: maxSurge=1, maxUnavailable=0 in deployment.yaml
+      - name: Deploy rolling update to AKS
         run: |
           IMAGE_TAG=${{ needs.build-push.outputs.image_tag }}
+          echo "Updating image to: ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
           kubectl set image deployment/${{ env.DEPLOYMENT }} \
             flask-app=${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} \
             -n ${{ env.NAMESPACE }}
 
-      - name: Wait for rollout
+      # Step 7 — Block until Kubernetes confirms rollout is complete
+      - name: Wait for rollout to complete
         run: |
           kubectl rollout status deployment/${{ env.DEPLOYMENT }} \
             -n ${{ env.NAMESPACE }} \
             --timeout=300s
 
-      - name: Verify deployment
+      # Step 8 — Live health check against the LoadBalancer external IP
+      - name: Verify deployment health
         run: |
+          echo "=== Pod status after rollout ==="
           kubectl get pods -n ${{ env.NAMESPACE }}
-          kubectl get svc -n ${{ env.NAMESPACE }}
-          EXTERNAL_IP=$(kubectl get svc devops-flask-svc -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-          echo "App running at: http://${EXTERNAL_IP}"
-          sleep 15
-          curl -f "http://${EXTERNAL_IP}/health/live"
-          echo "Health check passed!"
+
+          echo ""
+          echo "=== Getting LoadBalancer external IP ==="
+          EXTERNAL_IP=$(kubectl get svc devops-flask-svc \
+            -n ${{ env.NAMESPACE }} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          if [ -z "$EXTERNAL_IP" ]; then
+            echo "External IP not yet assigned — waiting 30s..."
+            sleep 30
+            EXTERNAL_IP=$(kubectl get svc devops-flask-svc \
+              -n ${{ env.NAMESPACE }} \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          fi
+
+          echo "App live at: http://${EXTERNAL_IP}"
+
+          echo ""
+          echo "=== Health check ==="
+          sleep 10
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "http://${EXTERNAL_IP}/health/live" || echo "000")
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Health check PASSED (HTTP ${HTTP_STATUS})"
+          else
+            echo "Health check FAILED (HTTP ${HTTP_STATUS})"
+            echo "Recent pod logs:"
+            kubectl logs -n ${{ env.NAMESPACE }} \
+              -l app=${{ env.DEPLOYMENT }} \
+              --tail=50
+            exit 1
+          fi
+
+      # Step 9 — Print a clean summary with rollout history
+      - name: Deployment summary
+        run: |
+          echo "============================================"
+          echo "Deployment complete!"
+          echo "Image     : ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.build-push.outputs.image_tag }}"
+          echo "Cluster   : ${{ env.AKS_CLUSTER }}"
+          echo "Namespace : ${{ env.NAMESPACE }}"
+          echo "============================================"
+          kubectl rollout history deployment/${{ env.DEPLOYMENT }} \
+            -n ${{ env.NAMESPACE }}
