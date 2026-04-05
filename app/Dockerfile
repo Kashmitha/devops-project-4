@@ -23,7 +23,7 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-ENV APP_VERSION=1.1.0
+ENV APP_VERSION=1.3.0
 ENV ENVIRONMENT=dev
 # Explicitly set PATH so gunicorn is found by non-root user
 ENV PATH="/usr/local/bin:$PATH"
@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health/live')"
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "30", \
-     "--worker-tmp-dir", "/tmp", "app:app"]
+  "--worker-tmp-dir", "/tmp", "app:app"]

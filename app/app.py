@@ -7,8 +7,8 @@ START_TIME = time.time()
 @app.route('/')
 def home():
     return jsonify({
-        "message": "Hello from DevOps Project 4 on Kubernetes! - Version 1.1.0!",
-        "version": os.environ.get("APP_VERSION", "1.0.0"),
+        "message": "Hello from DevOps Project 4 on Kubernetes! - Version 1.3.0!",
+        "version": os.environ.get("APP_VERSION", "1.3.0"),
         "environment": os.environ.get("ENVIRONMENT", "dev"),
         "pod_name": platform.node(),
         "kubernetes": True,
