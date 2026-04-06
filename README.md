@@ -5,23 +5,37 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33.7-blue)](https://kubernetes.io)
 [![AKS](https://img.shields.io/badge/Azure_AKS-1.33.7-0078D4)](https://azure.microsoft.com/products/kubernetes-service)
 
+---
+
 ## Overview
 
-Production-grade AKS cluster deployment with zero-downtime rolling updates,
-horizontal pod autoscaling, full observability via Prometheus and Grafana,
-and automated CI/CD through GitHub Actions.
+Production-grade AKS cluster deployment with:
+
+- Zero-downtime rolling updates
+- Horizontal Pod Autoscaling
+- Full observability via Prometheus and Grafana
+- Automated CI/CD through GitHub Actions
+
+---
 
 ## Architecture
 
+```
 GitHub → GitHub Actions → ACR → AKS (Kubernetes 1.33.7)
-└── devops-app namespace
-├── Deployment (3 replicas)
-├── Service (LoadBalancer)
-├── HPA (2–6 pods)
-└── ResourceQuota
-└── monitoring namespace
-├── Prometheus
-└── Grafana
+
+Namespaces:
+├── devops-app
+│   ├── Deployment (3 replicas)
+│   ├── Service (LoadBalancer)
+│   ├── HPA (2–6 pods)
+│   └── ResourceQuota
+│
+└── monitoring
+    ├── Prometheus
+    └── Grafana
+```
+
+---
 
 ## Tech Stack
 
@@ -37,9 +51,11 @@ GitHub → GitHub Actions → ACR → AKS (Kubernetes 1.33.7)
 | Grafana          | Latest                | Metrics visualisation       |
 | GitHub Actions   | Latest                | CI/CD automation            |
 
+---
+
 ## Key Concepts Demonstrated
 
-- Zero-downtime rolling updates (maxSurge=1, maxUnavailable=0)
+- Zero-downtime rolling updates (`maxSurge=1`, `maxUnavailable=0`)
 - Kubernetes rollback from failed deployment
 - Liveness, readiness, and startup probes
 - Horizontal Pod Autoscaler (CPU + memory triggers)
@@ -48,9 +64,11 @@ GitHub → GitHub Actions → ACR → AKS (Kubernetes 1.33.7)
 - Dynamic image tagging via GitHub SHA
 - AKS cluster autoscaler (1–3 nodes)
 
+---
+
 ## Usage
 
-### Provision infrastructure
+### 1. Provision Infrastructure
 
 ```bash
 cd terraform
@@ -58,30 +76,32 @@ terraform init
 terraform apply -var-file="environments/dev.tfvars"
 ```
 
-### Deploy application
+### 2. Deploy Application
 
 ```bash
 kubectl apply -f k8s/
 ```
 
-### Rolling update
+### 3. Rolling Update
 
 ```bash
 ./scripts/deploy.sh 1.1.0 devopsproject4acr devops-app devops-flask-app
 ```
 
-### Rollback
+### 4. Rollback
 
 ```bash
 ./scripts/rollback.sh devops-app devops-flask-app
 ```
 
-### Teardown
+### 5. Teardown Infrastructure
 
 ```bash
 cd terraform
 terraform destroy -var-file="environments/dev.tfvars"
 ```
+
+---
 
 ## License
 
