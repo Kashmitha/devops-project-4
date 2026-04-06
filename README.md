@@ -1,6 +1,6 @@
 # DevOps Project 4 — Kubernetes Deployment with Rolling Updates & Monitoring on Azure AKS
 
-[![CI/CD Pipeline](https://github.com/YOUR_USERNAME/devops-project-4/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/YOUR_USERNAME/devops-project-4/actions/workflows/ci-cd.yml)
+[![CI/CD Pipeline](https://github.com/YOUR_USERNAME/devops-project-4/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Kashmitha/devops-project-4/actions/workflows/ci-cd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33.7-blue)](https://kubernetes.io)
 [![AKS](https://img.shields.io/badge/Azure_AKS-1.33.7-0078D4)](https://azure.microsoft.com/products/kubernetes-service)
